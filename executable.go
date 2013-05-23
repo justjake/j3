@@ -11,8 +11,11 @@ import (
     "github.com/BurntSushi/xgbutil/ewmh"
     "github.com/BurntSushi/xgbutil/icccm"
     "github.com/BurntSushi/xgbutil/xwindow"
+    "github.com/BurntSushi/xgbutil/xgraphics"
 
     "log"
+
+    "github.com/justjake/j3/assets"
 )
 
 const (
@@ -124,6 +127,9 @@ func main() {
     // map windows -- this displays em!
     vert.Map()
     horiz.Map()
+
+    ximg := xgraphics.NewConvert(X, assets.SwapCenter)
+    ximg.XShow()
 
 
     // start event loop, even though we have no events
