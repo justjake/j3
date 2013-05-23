@@ -11,21 +11,26 @@ import (
     "github.com/BurntSushi/xgbutil/ewmh"
     "github.com/BurntSushi/xgbutil/icccm"
     "github.com/BurntSushi/xgbutil/xwindow"
-    "github.com/BurntSushi/xgbutil/xgraphics"
+    _ "github.com/BurntSushi/xgbutil/xgraphics"
 
     "log"
 
+    "image"
+
     "github.com/justjake/j3/assets"
+    "github.com/justjake/j3/ui"
 )
 
 const (
     WmName = "i3"  // only runs if the window manager has this name
-    ActionStripWidth = 80   // action strips in vertical orientation
-    ActionStripHeight = 350
     StripBackgroundColor = 0xcccccc
+    IconMargin = 20 // space around each iconyy in pixels
 )
 
 var (
+    IconSize = assets.SwapCenter.Bounds().Dx() // assume square icons
+    ActionStripWidth = IconMargin * 2 + IconSize   // action strips in vertical orientation
+    ActionStripHeight = IconSize * 5 + IconMargin * 6 // 5 icons with margin between and at top and bottom 
     StripGeometryHorizontal = xrect.New(0, 0, ActionStripHeight, ActionStripWidth)
     StripGeometryVertical = xrect.New(0, 0, ActionStripWidth, ActionStripHeight)
     // see http://standards.freedesktop.org/wm-spec/wm-spec-latest.html#idp6304176
@@ -40,7 +45,7 @@ func fatal(err error) {
 }
 
 // return the correct X, Y to center rect A over rect B
-func center(a, b xrect.Rect) (x, y int) {
+func centerOver(a, b xrect.Rect) (x, y int) {
     b_center_x := b.X() + b.Width() / 2
     b_center_y := b.Y() + b.Height() / 2
 
@@ -48,6 +53,19 @@ func center(a, b xrect.Rect) (x, y int) {
     y = b_center_y - a.Height() / 2
     return
 }
+
+func centerChild(child, parent xrect.Rect) (x, y int) {
+    a := child
+    b := parent
+    b_center_x := b.Width() / 2
+    b_center_y := b.Height() / 2
+
+    x = b_center_x - a.Width() / 2
+    y = b_center_y - a.Height() / 2
+    return
+}
+
+
 
 // set up a floating menu strip window with the right properties
 // float, no-rezise window
@@ -83,16 +101,35 @@ func createWindow(X *xgbutil.XUtil, geom xrect.Rect, parent *xwindow.Window) *xw
     // find x, y to center over parent
     parent_geo, err := parent.Geometry()
     fatal(err)
-    x, y := center(geom, parent_geo)
+    x, y := centerChild(geom, parent_geo)
 
     // create the window
     win, err := xwindow.Generate(X)
     fatal(err)
     // create the window as an OverrideRedirect, which is UNMANAGED
     // by any window manager. 
-    win.Create(X.RootWin(), x, y, geom.Width(), geom.Height(), 
+    win.Create(parent.Id, x, y, geom.Width(), geom.Height(), 
         xproto.CwBackPixel | xproto.CwOverrideRedirect, 
         StripBackgroundColor, 1)
+    return win
+}
+
+func createVertical(X *xgbutil.XUtil, parent *xwindow.Window) *xwindow.Window {
+    // first create the window
+    win := createWindow(X, StripGeometryVertical, parent)
+
+    deltaY := IconMargin + IconSize
+    offsetX := IconMargin
+    offsetY := IconMargin
+
+    imgs := []image.Image{assets.ShoveTop, assets.SplitTop, assets.SwapCenter, assets.SplitBottom, assets.ShoveBottom}
+    for i, img := range imgs {
+        icon := ui.NewIcon(X, img, win.Id)
+        icon.Move(offsetX, offsetY + deltaY * i)
+        icon.Window.Map()
+        log.Printf("Created icon %v for vertical window\n", icon)
+    }
+
     return win
 }
 
@@ -113,23 +150,22 @@ func main() {
     root := xwindow.New(X, X.RootWin())
 
     // create vertical options window
-    vert := createWindow(X, StripGeometryVertical, root)
-    horiz := createWindow(X, StripGeometryHorizontal, vert)
+    vert := createVertical(X, root)
 
     // TODO - make windows floating
-    configure(X, vert)
-    configure(X, horiz)
+    //configure(X, vert)
+    //configure(X, horiz)
     
     // TODO - show icons (!)
 
     // TODO - bind listeners on window events
+    ui.MakeDraggable(X, vert.Id)
 
     // map windows -- this displays em!
     vert.Map()
-    horiz.Map()
 
-    ximg := xgraphics.NewConvert(X, assets.SwapCenter)
-    ximg.XShow()
+    //ximg := xgraphics.NewConvert(X, assets.SwapCenter)
+    //ximg.XShow()
 
 
     // start event loop, even though we have no events
