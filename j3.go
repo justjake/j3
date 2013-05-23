@@ -58,6 +58,8 @@ func configure (X *xgbutil.XUtil, win *xwindow.Window) {
 
     // fix size using WM_NORMAL_HINTS
     // see http://tronche.com/gui/x/icccm/sec-4.html#s-4.1.2.3
+    // note that this is not necissary now that we use a OverrideRedirect
+    // window
 
     normal_hints := icccm.NormalHints{
         Flags: 16 | 32 | 512, // PMinSize | PMaxSize | PWinGravity
@@ -74,11 +76,20 @@ func configure (X *xgbutil.XUtil, win *xwindow.Window) {
 
 }
 
-func createWindow(X *xgbutil.XUtil, geom xrect.Rect) *xwindow.Window {
-    x, y := center(geom, xwindow.RootGeometry(X))
+func createWindow(X *xgbutil.XUtil, geom xrect.Rect, parent *xwindow.Window) *xwindow.Window {
+    // find x, y to center over parent
+    parent_geo, err := parent.Geometry()
+    fatal(err)
+    x, y := center(geom, parent_geo)
+
+    // create the window
     win, err := xwindow.Generate(X)
     fatal(err)
-    win.Create(X.RootWin(), x, y, geom.Width(), geom.Height(), xproto.CwBackPixel | xproto.CwOverrideRedirect, StripBackgroundColor, 1)
+    // create the window as an OverrideRedirect, which is UNMANAGED
+    // by any window manager. 
+    win.Create(X.RootWin(), x, y, geom.Width(), geom.Height(), 
+        xproto.CwBackPixel | xproto.CwOverrideRedirect, 
+        StripBackgroundColor, 1)
     return win
 }
 
@@ -92,13 +103,15 @@ func main() {
     wm_name, err := ewmh.GetEwmhWM(X)
     fatal(err)
     log.Printf("Window manager: %s\n", wm_name)
-    if wm_name != WmName {
-        log.Panicf("Expected window manager to be '%s' but detected '%s' instead", WmName, wm_name)
-    }
+    //if wm_name != WmName {
+    //    log.Panicf("Expected window manager to be '%s' but detected '%s' instead", WmName, wm_name)
+    //}
+
+    root := xwindow.New(X, X.RootWin())
 
     // create vertical options window
-    vert := createWindow(X, StripGeometryVertical)
-    horiz := createWindow(X, StripGeometryHorizontal)
+    vert := createWindow(X, StripGeometryVertical, root)
+    horiz := createWindow(X, StripGeometryHorizontal, vert)
 
     // TODO - make windows floating
     configure(X, vert)
