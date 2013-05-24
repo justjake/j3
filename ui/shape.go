@@ -19,6 +19,8 @@ func ComposeShape(X *xgbutil.XUtil, dst xproto.Window, rects []xrect.Rect) (err 
     combine_bounds := make([]shape.CombineCookie, len(rects))
     combine_clip   := make([]shape.CombineCookie, len(rects))
 
+    var operation shape.Op
+
     for i, rect := range rects {
         // make rectangular window of correct goemetry
         win, err := xwindow.Generate(X)
@@ -29,11 +31,20 @@ func ComposeShape(X *xgbutil.XUtil, dst xproto.Window, rects []xrect.Rect) (err 
         win.Create(X.RootWin(), rect.X(), rect.Y(), rect.Width(), rect.Height(), xproto.CwBackPixel, 0xffffff)
         log.Println("did create window")
 
+        // choose operation. on the first one, we want to set the shape.
+        if i == 0 {
+            operation = shape.SoSet
+        } else {
+            operation = shape.SoUnion
+        }
+
         // combine window request
+        x, y := int16(rect.X()), int16(rect.Y())
+
         combine_kind := shape.Kind(shape.SkBounding)
-        combine_bounds[i] = shape.CombineChecked(X.Conn(), shape.SoUnion, combine_kind, combine_kind, dst, 0, 0, win.Id)
+        combine_bounds[i] = shape.CombineChecked(X.Conn(), operation, combine_kind, combine_kind, dst, x, y, win.Id)
         combine_kind = shape.Kind(shape.SkClip)
-        combine_clip[i] = shape.CombineChecked(X.Conn(), shape.SoUnion, combine_kind, combine_kind, dst, 0, 0, win.Id)
+        combine_clip[i] = shape.CombineChecked(X.Conn(), operation, combine_kind, combine_kind, dst, x, y, win.Id)
     }
     return nil
 }
