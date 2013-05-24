@@ -63,6 +63,10 @@ func FindUnderMouse(X *xgbutil.XUtil) (xproto.Window, error) {
         return 0, err
     }
     child := reply.Child
+
+    // ingore the rest for now
+    return child, nil
+
     root  := X.RootWin()
 
     for child != root {
@@ -80,7 +84,7 @@ func FindUnderMouse(X *xgbutil.XUtil) (xproto.Window, error) {
         child = tree.Parent
     }
     // we didn't find the window :(
-    return 0, fmt.Errorf("FindUnderMouse: window under mouse %i not found in EWMH clients %v", reply.Child, clients)
+    return 0, fmt.Errorf("FindUnderMouse: window under mouse %v not found in EWMH clients %v", reply.Child, clients)
 }
 
 // meat and potatoes of our window manager
