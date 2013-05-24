@@ -44,13 +44,6 @@ func MakeDraggable(X *xgbutil.XUtil, win xproto.Window) {
     }
     // moves the window
     stepDrag := func(X *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
-        // ignore duplicate events
-        log.Printf("Dragging, root{%v %v}, event{%v %v}", rootX, rootY, eventX, eventY)
-        if rootX == lastX && rootY == lastY {
-            log.Println("discarded")
-            return
-        }
-
         // maintain mouse position within window
         toX := rootX - offsetX
         toY := rootY - offsetY
