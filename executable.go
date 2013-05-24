@@ -199,7 +199,7 @@ func main() {
     dz := wm.NewDropZone(vert[2], wm.Swap)
     handleRootClick := func(X *xgbutil.XUtil, ev xevent.ButtonPressEvent) {
         // retrieve window
-        log.Println("Starting to retrieve window for click")
+        log.Println("[ROOT WINDOW] Starting to retrieve window for click")
         win, err := wm.FindUnderMouse(X)
         if err != nil {
             log.Printf("Issues handling root click: %v\n", err)
@@ -220,15 +220,17 @@ func main() {
         // the three drag steps, emulated with mousepresses - easier
         if !dm.Dragging {
             dm.StartDrag(xwin)
+            log.Println("Started drag. Next: select target")
             return
         }
 
         if dm.Target == nil {
             dm.SetTarget(xwin)
-            return
+            log.Println("Selected target. Next: swap!")
         }
 
         // end the drag if we've gotten to here
+        log.Println("About to end drag...!")
         err = dm.EndDrag(dz)
         if err != nil {
             log.Printf("RootWindowClick end drag error: %v\n", err)
