@@ -4,6 +4,7 @@ package main
 
 import (
     "github.com/BurntSushi/xgb/xproto"
+    "github.com/BurntSushi/xgb/shape"
 
     "github.com/BurntSushi/xgbutil"
     "github.com/BurntSushi/xgbutil/xrect"
@@ -24,13 +25,14 @@ import (
 const (
     WmName = "i3"  // only runs if the window manager has this name
     StripBackgroundColor = 0xcccccc
-    IconMargin = 20 // space around each iconyy in pixels
+    IconMargin = 15 // space between icons and border
+    IconPadding = 25 // space between two icons
 )
 
 var (
     IconSize = assets.SwapCenter.Bounds().Dx() // assume square icons
     ActionStripWidth = IconMargin * 2 + IconSize   // action strips in vertical orientation
-    ActionStripHeight = IconSize * 5 + IconMargin * 6 // 5 icons with margin between and at top and bottom 
+    ActionStripHeight = IconSize * 5 + IconPadding * 4 + IconMargin * 2 // 5 icons with margin between and at top and bottom 
     StripGeometryHorizontal = xrect.New(0, 0, ActionStripHeight, ActionStripWidth)
     StripGeometryVertical = xrect.New(0, 0, ActionStripWidth, ActionStripHeight)
     // see http://standards.freedesktop.org/wm-spec/wm-spec-latest.html#idp6304176
@@ -118,7 +120,7 @@ func createVertical(X *xgbutil.XUtil, parent *xwindow.Window) *xwindow.Window {
     // first create the window
     win := createWindow(X, StripGeometryVertical, parent)
 
-    deltaY := IconMargin + IconSize
+    deltaY := IconPadding + IconSize
     offsetX := IconMargin
     offsetY := IconMargin
 
@@ -127,6 +129,11 @@ func createVertical(X *xgbutil.XUtil, parent *xwindow.Window) *xwindow.Window {
         icon := ui.NewIcon(X, img, win.Id)
         icon.Move(offsetX, offsetY + deltaY * i)
         icon.Window.Map()
+
+        // disable Shove actions for now -- they make no sense for general win managers
+        if i == 0 || i == 4 {
+            icon.SetState(ui.StateDisabled)
+        }
         log.Printf("Created icon %v for vertical window\n", icon)
     }
 
@@ -138,6 +145,9 @@ func main() {
     // establish X connection
     X, err := xgbutil.NewConn()
     fatal(err)
+
+    // initiate shape
+    shape.Init(X.Conn())
 
     // make sure i3 is running or something
     wm_name, err := ewmh.GetEwmhWM(X)
@@ -152,6 +162,17 @@ func main() {
     // create vertical options window
     vert := createVertical(X, root)
 
+    cross, err := xwindow.Generate(X)
+    cross.Create(X.RootWin(), 400, 400, 1, 1, 
+        xproto.CwBackPixel | xproto.CwOverrideRedirect, 
+        StripBackgroundColor, 1)
+    fatal(err)
+
+
+    rects := []xrect.Rect{StripGeometryVertical, StripGeometryHorizontal}
+    err = ui.ComposeShape(X, cross.Id, rects)
+    fatal(err)
+
     // TODO - make windows floating
     //configure(X, vert)
     //configure(X, horiz)
@@ -160,9 +181,11 @@ func main() {
 
     // TODO - bind listeners on window events
     ui.MakeDraggable(X, vert.Id)
+    ui.MakeDraggable(X, cross.Id)
 
     // map windows -- this displays em!
     vert.Map()
+    cross.Map()
 
     //ximg := xgraphics.NewConvert(X, assets.SwapCenter)
     //ximg.XShow()
