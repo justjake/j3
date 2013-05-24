@@ -54,4 +54,5 @@ func MakeDraggable(X *xgbutil.XUtil, win xproto.Window) {
 
     // actually bind handler to window
     mousebind.Drag(X, win, win, "1", true, startDrag, stepDrag, stopDrag)
+    log.Printf("MakeDraggable: activated window %v\n", xwin)
 }
