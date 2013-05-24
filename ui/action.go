@@ -38,7 +38,6 @@ func MakeDraggable(X *xgbutil.XUtil, win xproto.Window) {
         lastX = rootX
         lastY = rootY
 
-        log.Println("started drag")
         // apparently the cursor is just ID 0
         return true, 0
     }
@@ -56,6 +55,3 @@ func MakeDraggable(X *xgbutil.XUtil, win xproto.Window) {
     // actually bind handler to window
     mousebind.Drag(X, win, win, "1", true, startDrag, stepDrag, stopDrag)
 }
-
-
-
