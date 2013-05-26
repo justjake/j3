@@ -7,7 +7,7 @@ import (
     "os"
     "log"
     imglib "image"
-    _ "image/png"
+    _ "image/png"   // so far the assets are only PNGs
     "bytes"
 
     // for getting function names
@@ -15,33 +15,49 @@ import (
     "runtime"
 )
 
-// asset declaration
 var (
 
-    logger       *log.Logger
+    logger       *log.Logger = log.New(os.Stderr, "[assets]", log.LstdFlags | log.Lshortfile)
 
-    SplitTop     imglib.Image
-    SplitRight   imglib.Image
-    SplitBottom  imglib.Image
-    SplitLeft    imglib.Image
+    // icons indicating splitting a window in half, and moving a new window into the freed space
+    SplitTop     imglib.Image = image(split_top_png)
+    SplitRight   imglib.Image = image(split_right_png)
+    SplitBottom  imglib.Image = image(split_bottom_png)
+    SplitLeft    imglib.Image = image(split_left_png)
 
-    ShoveTop     imglib.Image
-    ShoveRight   imglib.Image
-    ShoveBottom  imglib.Image
-    ShoveLeft    imglib.Image
+    // icons indicating moving a containter in a direction, and inserting a window into the freed space
+    ShoveTop     imglib.Image = image(shove_top_png)
+    ShoveRight   imglib.Image = image(shove_right_png)
+    ShoveBottom  imglib.Image = image(shove_bottom_png)
+    ShoveLeft    imglib.Image = image(shove_left_png)
 
-    SwapCenter   imglib.Image
+    // incon indicating swapping two containers
+    Swap         imglib.Image = image(swap_center_png)
+
+    // Named map of the assets
+    Named =      map[string]imglib.Image{
+        "SplitTop"    :  SplitTop,
+        "SplitRight"  :  SplitRight,
+        "SplitBottom" :  SplitBottom,
+        "SplitLeft"   :  SplitLeft,
+
+        "ShoveTop"    :  ShoveTop,
+        "ShoveRight"  :  ShoveRight,
+        "ShoveBottom" :  ShoveBottom,
+        "ShoveLeft"   :  ShoveLeft,
+
+        "SwapCenter"  :  Swap,
+    }
 )
-
-
 
 // Load functions are generated from binary data by the
 // go-bindata tool
 type Loader func() ([]byte)
 
+// assets are go code so we should be worried if they fail
 func fatal(name string, err error) {
     if err != nil {
-        log.Panicf("Asset load for %s failed: %v\n", name, err)
+        log.Fatalf("Asset load for %s failed: %v\n", name, err)
     }
 }
 
@@ -69,25 +85,3 @@ func image(load Loader) imglib.Image {
 
     return img
 }
-
-
-// load all assets
-func init() {
-    // set up logging first
-    logger = log.New(os.Stderr, "[assets]", log.LstdFlags | log.Lshortfile)
-
-    SplitTop =     image(split_top_png)
-    SplitRight =   image(split_right_png)
-    SplitBottom =  image(split_bottom_png)
-    SplitLeft =    image(split_left_png)
-
-    ShoveTop =     image(shove_top_png)
-    ShoveRight =   image(shove_right_png)
-    ShoveBottom =  image(shove_bottom_png)
-    ShoveLeft =    image(shove_left_png)
-
-    SwapCenter =   image(swap_center_png)
-}
-
-
-

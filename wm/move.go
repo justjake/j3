@@ -18,6 +18,22 @@ type WindowInteraction func(*xwindow.Window, *xwindow.Window) (error)
 // bottom half of the initial area, and the incoming is the top.
 
 // cutting windows in half on the X axis
+
+var Actions = map[string]WindowInteraction{
+    "SplitTop"    :  SplitTop,
+    "SplitRight"  :  SplitRight,
+    "SplitBottom" :  SplitBottom,
+    "SplitLeft"   :  SplitLeft,
+
+// not done yet...
+//    "ShoveTop"    :  ShoveTop,
+//    "ShoveRight"  :  ShoveRight,
+//    "ShoveBottom" :  ShoveBottom,
+//    "ShoveLeft"   :  ShoveLeft,
+
+    "SwapCenter"  :  Swap,
+}
+
 func splitVertical(target, incoming *xwindow.Window, incomingOnTop bool) error {
     bounds, err := target.DecorGeometry()
     if err != nil {
@@ -146,5 +162,3 @@ func Swap(target, incoming *xwindow.Window) error {
 // THe current splits implementation works only for floating window managers,
 // which don't have crazy-cray nesting stuff
 // so shoves don't yet have any meaning.
-
-
