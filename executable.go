@@ -207,14 +207,12 @@ func main() {
         }
 
         // cool awesome!
-        log.Printf("DragStart: starting to drag %v\n", win)
         dm.StartDrag(win)
         // continue the drag
         return true, 0
     }
 
     handleDragStep := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
-        log.Println("DragStep")
         // see if we have a window that ISN'T the incoming window
         win, err := wm.FindManagedWindowUnderMouse(X)
         if err != nil {
@@ -251,7 +249,6 @@ func main() {
     }
 
     handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
-        log.Println("DragEnd")
         exit_early := false
         // get icon we are dropping over
         icon_win, err := wm.FindNextUnderMouse(X, cross.Id)
