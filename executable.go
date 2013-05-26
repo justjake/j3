@@ -21,8 +21,12 @@ import (
     "github.com/justjake/j3/wm"
 )
 
+
+// CONFIGURATION
+// Opt-Shift-LeftMouseButton drags activate j3!
+const KeyCombo = ui.KeyOption + "-Shift-1"
+
 const (
-    WmName = "i3"  // only runs if the window manager has this name
     StripBackgroundColor = 0xcccccc
     IconMargin = 15 // space between icons and border
     IconPadding = 25 // space between two icons
@@ -187,8 +191,8 @@ func main() {
 
     
     // show off the cross by making it mouse-draggable, and displaying it!
-    ui.MakeDraggable(X, cross.Id)
-    cross.Map()
+    // ui.MakeDraggable(X, cross.Id)
+    // cross.Map()
 
 
     // define handlers for the three parts of any drag-drop operation
@@ -209,7 +213,6 @@ func main() {
         return true, 0
     }
 
-    // TODO: rate limit this shit, yo
     handleDragStep := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
         log.Println("DragStep")
         // see if we have a window that ISN'T the incoming window
@@ -243,6 +246,7 @@ func main() {
             target_geom.YSet(ty)
             x, y := centerOver(cross.Geom, target_geom)
             cross.Move(x, y)
+            cross.Map()
         }
     }
 
@@ -262,6 +266,10 @@ func main() {
             log.Printf("DragEnd: drag manager state error: %v\n", err)
             exit_early = true
         }
+
+
+        // we tried: hide UI
+        cross.Unmap()
 
         // we had some sort of error, escape!
         if exit_early { return }
@@ -290,7 +298,7 @@ func main() {
         }
     }
 
-    mousebind.Drag(X, X.RootWin(), X.RootWin(), ui.Mod+"-1", true, 
+    mousebind.Drag(X, X.RootWin(), X.RootWin(), KeyCombo, true, 
         handleDragStart, 
         handleDragStep, 
         handleDragEnd)
