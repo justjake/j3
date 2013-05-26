@@ -46,7 +46,7 @@ var (
         "ShoveBottom" :  ShoveBottom,
         "ShoveLeft"   :  ShoveLeft,
 
-        "SwapCenter"  :  Swap,
+        "Swap"  :  Swap,
     }
 )
 
