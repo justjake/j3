@@ -25,11 +25,10 @@ var Actions = map[string]WindowInteraction{
     "SplitBottom" :  SplitBottom,
     "SplitLeft"   :  SplitLeft,
 
-// not done yet...
-//    "ShoveTop"    :  ShoveTop,
-//    "ShoveRight"  :  ShoveRight,
-//    "ShoveBottom" :  ShoveBottom,
-//    "ShoveLeft"   :  ShoveLeft,
+    "ShoveTop"    :  ShoveTop,
+    "ShoveRight"  :  ShoveRight,
+    "ShoveBottom" :  ShoveBottom,
+    "ShoveLeft"   :  ShoveLeft,
 
     "Swap"  :  Swap,
 }
@@ -156,8 +155,67 @@ func Swap(target, incoming *xwindow.Window) error {
     return nil
 }
 
+type Direction uint8
+const (
+    Top Direction = 1 << iota
+    Right
+    Bottom
+    Left
+)
 
-// TODO: shove actions
+// Put the incoming window on the `dir` side of the target,
+// and transform the orthagonal dimension (eg, if `dir` is Up, then dim is `Width`
+// to be the same as the target's dimension
+// TODO: clip windows to display boundry
+func Shove(target, incoming *xwindow.Window, dir Direction) error {
+    // get geometries
+    i, err := incoming.DecorGeometry()
+    if err != nil { return err }
+
+    t, err := target.DecorGeometry()
+    if err != nil { return err }
+
+
+    // move in the correct direction
+    if dir == Top {
+        err := incoming.WMMoveResize(t.X(), t.Y() - i.Height(), t.Width(), i.Height())
+        if err != nil { return err }
+    }
+
+    if dir == Bottom {
+        err := incoming.WMMoveResize(t.X(), t.Y() + t.Height(), t.Width(), i.Height())
+        if err != nil { return err }
+    }
+
+    if dir == Left {
+        err := incoming.WMMoveResize(t.X() - i.Width(), t.Y(), i.Width(), t.Height())
+        if err != nil { return err }
+    }
+
+    if dir == Right {
+        err := incoming.WMMoveResize(t.X() + t.Width(), t.Y(), i.Width(), t.Height())
+        if err != nil { return err }
+    }
+
+    return nil
+}
+
+// see Shove
+func ShoveTop(t, i *xwindow.Window) error {
+    return Shove(t, i, Top)
+}
+func ShoveRight(t, i *xwindow.Window) error {
+    return Shove(t, i, Right)
+}
+func ShoveBottom(t, i *xwindow.Window) error {
+    return Shove(t, i, Bottom)
+}
+func ShoveLeft(t, i *xwindow.Window) error {
+    return Shove(t, i, Left)
+}
+
+
+// TODO: all of the above in a tiling context
 // Shoves are basically just splits, but performed one-level-up, on a window's parent
 // THe current splits implementation works only for floating window managers,
 // which don't have crazy-cray nesting stuff
