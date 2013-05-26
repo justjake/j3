@@ -114,10 +114,10 @@ func makeCross(X *xgbutil.XUtil) *xwindow.Window {
 }
 
 
+// reposition all the icons named in `icon_names` in thier window
 func configureHorizontalIcons(all_icons map[string]*ui.Icon, icon_names []string,  offsetY int){
     deltaX := IconPadding + IconSize
     offsetX := IconMargin
-
 
     for i, name := range icon_names {
         if icon, ok := all_icons[name]; ok {
@@ -127,12 +127,10 @@ func configureHorizontalIcons(all_icons map[string]*ui.Icon, icon_names []string
     }
 }
 
-// add the vertical icons row to a window
+// reposition all the icons named in `icon_names` in thier window
 func configureVerticalIcons(all_icons map[string]*ui.Icon, icon_names []string,  offsetX int)  {
-
     deltaY := IconPadding + IconSize
     offsetY := IconMargin
-
 
     for i, name := range icon_names {
         if icon, ok := all_icons[name]; ok {
@@ -152,7 +150,7 @@ func main() {
     shape.Init(X.Conn())
     mousebind.Initialize(X)
 
-    // Detail our current window manager. Insures a minimum of WEMH compliance
+    // Detail our current window manager. Insures a minimum of EWMH compliance
     wm_name, err := ewmh.GetEwmhWM(X)
     fatal(err)
     log.Printf("Window manager: %s\n", wm_name)
@@ -179,17 +177,13 @@ func main() {
         }
     }
 
-    //// correctly position and show the icons on the cross UI
-
-    vert_icons :=  []string{"ShoveTop", "SplitTop", "Swap", "SplitBottom", "ShoveBottom"}
-    // we put DoesNotExist in here because addVerticalIcons adds the center icon
-    // so we don't want to do that again!
-    horiz_icons := []string{"ShoveLeft", "SplitLeft", "DoesNotExist", "SplitRight", "ShoveRight"}
-
+    // correctly position and show the icons on the cross UI
     offset := IconMargin + 2 * (IconSize + IconPadding)
 
+    vert_icons :=  []string{"ShoveTop", "SplitTop", "Swap", "SplitBottom", "ShoveBottom"}
+    horiz_icons := []string{"ShoveLeft", "SplitLeft", "Swap", "SplitRight", "ShoveRight"}
     configureVerticalIcons(icons, vert_icons, offset)
-    configureVerticalIcons(icons, horiz_icons, offset)
+    configureHorizontalIcons(icons, horiz_icons, offset)
 
     
     // show off the cross by making it mouse-draggable, and displaying it!
@@ -199,23 +193,25 @@ func main() {
 
     // define handlers for the three parts of any drag-drop operation
     dm := ui.DragManager{}
-    handleDragStart := func(X *xgbutil.XUtil, rx, ry, ex, ey int) (cancel bool, cursor xproto.Cursor) {
+    handleDragStart := func(X *xgbutil.XUtil, rx, ry, ex, ey int) (cont bool, cursor xproto.Cursor) {
         // find the window we are trying to drag
         win, err := wm.FindManagedWindowUnderMouse(X)
         if err != nil {
-            // cancel the drag
+            // don't continue the drag
             log.Printf("DragStart: could not get incoming window: %v\n", err)
-            return true, 0
+            return false, 0
         }
 
         // cool awesome!
+        log.Printf("DragStart: starting to drag %v\n", win)
         dm.StartDrag(win)
-        // DON'T cancel the drag
-        return false, 0
+        // continue the drag
+        return true, 0
     }
 
     // TODO: rate limit this shit, yo
     handleDragStep := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
+        log.Println("DragStep")
         // see if we have a window that ISN'T the incoming window
         win, err := wm.FindManagedWindowUnderMouse(X)
         if err != nil {
@@ -230,17 +226,28 @@ func main() {
             // TODO: actually do this, center operates on rects, and all I have is this xproto.Window
             dm.SetTarget(win)
 
+            // get the target width/height
             target_geom, err := xwindow.New(X, win).Geometry()
             if err != nil {
                 log.Printf("DragStep: issues getting target geometry: %v\n", err)
                 return
             }
+
+            // set the target goemetry X, Y to the actual x, y relative to the root window
+            tx, ty, err := TranslateCoordinatesSync(X, win, X.RootWin(), 0, 0)
+            if err != nil {
+                log.Printf("DragStep: issue translating target coordinates to root coordinates: %v\n", err)
+                return
+            }
+            target_geom.XSet(tx)
+            target_geom.YSet(ty)
             x, y := centerOver(cross.Geom, target_geom)
             cross.Move(x, y)
         }
     }
 
     handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
+        log.Println("DragEnd")
         exit_early := false
         // get icon we are dropping over
         icon_win, err := wm.FindNextUnderMouse(X, cross.Id)
@@ -266,8 +273,12 @@ func main() {
                 inc_win := xwindow.New(X, incoming_id)
                 if target_id, t_ok := target.(xproto.Window); t_ok {
                     t_win := xwindow.New(X, target_id)
+
+
                     // perform the action!
-                    action(inc_win, t_win)
+                    action(t_win, inc_win)
+
+
                 } else {
                     log.Println("DragEnd: target type error (was %v)\n", target)
                 }
@@ -283,7 +294,6 @@ func main() {
         handleDragStart, 
         handleDragStep, 
         handleDragEnd)
-
 
     // start event loop, even though we have no events
     // to keep app from just closing
