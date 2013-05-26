@@ -16,8 +16,6 @@ import (
 
     "log"
 
-    "image"
-
     "github.com/justjake/j3/assets"
     "github.com/justjake/j3/ui"
     "github.com/justjake/j3/wm"
@@ -33,7 +31,7 @@ const (
 var (
     // TODO: icons are not square. Make the geometry calculations right!
     // TODO: IconWidth and IconHeight replace IconSize
-    IconSize = assets.SwapCenter.Bounds().Dx() // assume square icons
+    IconSize = assets.Swap.Bounds().Dx() // assume square icons
     ActionStripWidth = IconMargin * 2 + IconSize   // action strips in vertical orientation
     ActionStripHeight = IconSize * 5 + IconPadding * 4 + IconMargin * 2 // 5 icons with margin between and at top and bottom 
 
@@ -69,11 +67,23 @@ func centerChild(child, parent xrect.Rect) (x, y int) {
     return
 }
 
+func TranslateCoordinatesSync(X *xgbutil.XUtil, src, dest xproto.Window, x, y int) (dest_x, dest_y int, err error) {
+    Xx, Xy := int16(x), int16(y)
+    cookie := xproto.TranslateCoordinates(X.Conn(), src, dest, Xx, Xy)
+    reply, err := cookie.Reply()
+    if err != nil {
+        return 0, 0, err
+    }
+    dest_x, dest_y = int(reply.DstX), int(reply.DstY)
+    return
+}
+
 func makeCross(X *xgbutil.XUtil) *xwindow.Window {
     // create destination window
     // we will replace its geometry with one created using xgb.Shape via ui.ComposeShape
     cross, err := xwindow.Generate(X)
     fatal(err)
+
     cross.Create(X.RootWin(), 0, 0, ActionStripHeight, ActionStripHeight, 
         xproto.CwBackPixel | xproto.CwOverrideRedirect, 
         StripBackgroundColor, 1)
@@ -104,58 +114,32 @@ func makeCross(X *xgbutil.XUtil) *xwindow.Window {
 }
 
 
-func addHorizontalIcons(X *xgbutil.XUtil, win *xwindow.Window, offsetY int) []*ui.Icon {
+func configureHorizontalIcons(all_icons map[string]*ui.Icon, icon_names []string,  offsetY int){
     deltaX := IconPadding + IconSize
     offsetX := IconMargin
 
-    imgs := []image.Image{assets.ShoveLeft, assets.SplitLeft, nil, assets.SplitRight, assets.ShoveRight}
-    icons := make([]*ui.Icon, len(imgs))
-    for i, img := range imgs {
 
-        // drop center (nil) icon
-        if img == nil {
-            continue
+    for i, name := range icon_names {
+        if icon, ok := all_icons[name]; ok {
+            icon.Move(offsetX + deltaX * i, offsetY)
+            icon.Window.Map()
         }
-
-        icon := ui.NewIcon(X, img, win.Id)
-        icon.Move(offsetX + deltaX * i, offsetY)
-        icon.Window.Map()
-
-        icons[i] = icon
-
-        // disable Shove actions for now -- they make no sense for general win managers
-        if i == 0 || i == 4 {
-            icon.SetState(ui.StateDisabled)
-        }
-        log.Printf("Created icon %v for horizontal window\n", icon)
     }
-
-    return icons
-
 }
 
 // add the vertical icons row to a window
-func addVerticalIcons(X *xgbutil.XUtil, win *xwindow.Window, offsetX int) []*ui.Icon {
+func configureVerticalIcons(all_icons map[string]*ui.Icon, icon_names []string,  offsetX int)  {
 
     deltaY := IconPadding + IconSize
     offsetY := IconMargin
 
-    imgs := []image.Image{assets.ShoveTop, assets.SplitTop, assets.SwapCenter, assets.SplitBottom, assets.ShoveBottom}
-    icons := make([]*ui.Icon, len(imgs))
-    for i, img := range imgs {
-        icon := ui.NewIcon(X, img, win.Id)
-        icon.Move(offsetX, offsetY + deltaY * i)
-        icon.Window.Map()
 
-        icons[i] = icon
-
-        // disable Shove actions for now -- they make no sense for general win managers
-        if i == 0 || i == 4 {
-            icon.SetState(ui.StateDisabled)
+    for i, name := range icon_names {
+        if icon, ok := all_icons[name]; ok {
+            icon.Move(offsetX, offsetY + deltaY * i)
+            icon.Window.Map()
         }
-        log.Printf("Created icon %v for vertical window\n", icon)
     }
-    return icons
 }
 
 
@@ -168,78 +152,138 @@ func main() {
     shape.Init(X.Conn())
     mousebind.Initialize(X)
 
-    // make sure i3 is running or something
+    // Detail our current window manager. Insures a minimum of WEMH compliance
     wm_name, err := ewmh.GetEwmhWM(X)
     fatal(err)
     log.Printf("Window manager: %s\n", wm_name)
-    //if wm_name != WmName {
-    //    log.Panicf("Expected window manager to be '%s' but detected '%s' instead", WmName, wm_name)
-    //}
 
     // Produce visual UI
     cross := makeCross(X)
 
-    // show icons
+    // map icons to thier actions
+    // this is so we can choose the right action based on what icon the mouse is over
+    // when our drag ends
+    icons := make(map[string]*ui.Icon, len(assets.Named))
+    win_to_action := make(map[xproto.Window]wm.WindowInteraction)
+    for name, image := range assets.Named {
+        // create icons for each asset image
+        icon := ui.NewIcon(X, image, cross.Id)
+        icons[name] = icon
+        // if we have an action named the same thing as the icon, then link them!
+        if action, ok := wm.Actions[name]; ok {
+            win_to_action[icon.Window.Id] = action
+        } else {
+            // otherwise,
+            // shade the icon because it has no action attatched to it
+            icon.SetState(ui.StateDisabled)
+        }
+    }
+
+    //// correctly position and show the icons on the cross UI
+
+    vert_icons :=  []string{"ShoveTop", "SplitTop", "Swap", "SplitBottom", "ShoveBottom"}
+    // we put DoesNotExist in here because addVerticalIcons adds the center icon
+    // so we don't want to do that again!
+    horiz_icons := []string{"ShoveLeft", "SplitLeft", "DoesNotExist", "SplitRight", "ShoveRight"}
+
     offset := IconMargin + 2 * (IconSize + IconPadding)
-    vert := addVerticalIcons(X, cross, offset)
-    _ = addHorizontalIcons(X, cross, offset)
 
-    // TODO - bind listeners on window events
+    configureVerticalIcons(icons, vert_icons, offset)
+    configureVerticalIcons(icons, horiz_icons, offset)
+
+    
+    // show off the cross by making it mouse-draggable, and displaying it!
     ui.MakeDraggable(X, cross.Id)
-
-    // map windows -- this displays em!
     cross.Map()
 
 
-
-    // Bind events
-
-    dm := wm.NewDragManager(X, cross)
-    // center action
-    dz := wm.NewDropZone(vert[2], wm.Swap)
-    handleRootClick := func(X *xgbutil.XUtil, ev xevent.ButtonPressEvent) {
-        // retrieve window
-        log.Println("[ROOT WINDOW] Starting to retrieve window for click")
-        win, err := wm.FindUnderMouse(X)
+    // define handlers for the three parts of any drag-drop operation
+    dm := ui.DragManager{}
+    handleDragStart := func(X *xgbutil.XUtil, rx, ry, ex, ey int) (cancel bool, cursor xproto.Cursor) {
+        // find the window we are trying to drag
+        win, err := wm.FindManagedWindowUnderMouse(X)
         if err != nil {
-            log.Printf("Issues handling root click: %v\n", err)
-            return
+            // cancel the drag
+            log.Printf("DragStart: could not get incoming window: %v\n", err)
+            return true, 0
         }
 
-        // construct utility window for improved logging (?)
-        xwin := xwindow.New(X, win)
-        _, err = xwin.Geometry()
-        if err != nil {
-            log.Printf("Cannot get window [%v] geometry: %v\n", xwin, err)
-            return
-        }
-
-        // WOO WE HAVE A WINDOW HUSTON
-        log.Printf("RootWindowClick: touched window %v\n", xwin)
-
-        // the three drag steps, emulated with mousepresses - easier
-        if !dm.Dragging {
-            dm.StartDrag(xwin)
-            log.Println("Started drag. Next: select target")
-            return
-        }
-
-        if dm.Target == nil {
-            dm.SetTarget(xwin)
-            log.Println("Selected target. Next: swap!")
-        }
-
-        // end the drag if we've gotten to here
-        log.Println("About to end drag...!")
-        err = dm.EndDrag(dz)
-        if err != nil {
-            log.Printf("RootWindowClick end drag error: %v\n", err)
-        } else {
-            log.Printf("RootWindowClick: success in drag-ending!\n")
-        }
-
+        // cool awesome!
+        dm.StartDrag(win)
+        // DON'T cancel the drag
+        return false, 0
     }
-    mousebind.ButtonPressFun(handleRootClick).Connect(X, X.RootWin(), ui.Mod+"-1", false, true)
+
+    // TODO: rate limit this shit, yo
+    handleDragStep := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
+        // see if we have a window that ISN'T the incoming window
+        win, err := wm.FindManagedWindowUnderMouse(X)
+        if err != nil {
+            // whatever
+            log.Printf("DragStep: no window found or something: %v\n", err)
+            return
+        }
+
+        // oh we have a window? and it isn't the start window!? And not the current target!?
+        if win != dm.Incoming && win != dm.Target {
+            // reposition the cross over it
+            // TODO: actually do this, center operates on rects, and all I have is this xproto.Window
+            dm.SetTarget(win)
+
+            target_geom, err := xwindow.New(X, win).Geometry()
+            if err != nil {
+                log.Printf("DragStep: issues getting target geometry: %v\n", err)
+                return
+            }
+            x, y := centerOver(cross.Geom, target_geom)
+            cross.Move(x, y)
+        }
+    }
+
+    handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
+        exit_early := false
+        // get icon we are dropping over
+        icon_win, err := wm.FindNextUnderMouse(X, cross.Id)
+        if err != nil {
+            log.Printf("DragEnd: icon not found: %v\n", err)
+            exit_early = true
+        }
+
+        incoming, target, err := dm.EndDrag()
+        // drag manager produces errors if we don't have both an Incoming and a Target yet
+        if err != nil {
+            log.Printf("DragEnd: drag manager state error: %v\n", err)
+            exit_early = true
+        }
+
+        // we had some sort of error, escape!
+        if exit_early { return }
+
+        // retrieve the action that this icon indicates
+        if action, ok := win_to_action[icon_win]; ok {
+            // create util-window objects from our window IDs
+            if incoming_id, inc_ok := incoming.(xproto.Window); inc_ok {
+                inc_win := xwindow.New(X, incoming_id)
+                if target_id, t_ok := target.(xproto.Window); t_ok {
+                    t_win := xwindow.New(X, target_id)
+                    // perform the action!
+                    action(inc_win, t_win)
+                } else {
+                    log.Println("DragEnd: target type error (was %v)\n", target)
+                }
+            } else {
+                log.Println("DragEnd: incoming type error (was %v)\n", incoming)
+            }
+        } else {
+            log.Printf("DragEnd: couldn't map window %v to an action", icon_win)
+        }
+    }
+
+    mousebind.Drag(X, X.RootWin(), X.RootWin(), ui.Mod+"-1", true, 
+        handleDragStart, 
+        handleDragStep, 
+        handleDragEnd)
+
 
     // start event loop, even though we have no events
     // to keep app from just closing
