@@ -31,7 +31,7 @@ var Actions = map[string]WindowInteraction{
 //    "ShoveBottom" :  ShoveBottom,
 //    "ShoveLeft"   :  ShoveLeft,
 
-    "SwapCenter"  :  Swap,
+    "Swap"  :  Swap,
 }
 
 func splitVertical(target, incoming *xwindow.Window, incomingOnTop bool) error {
