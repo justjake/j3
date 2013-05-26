@@ -21,22 +21,22 @@ func (dm *DragManager) SetTarget(target interface{}) {
 }
 
 // this needs significant reconsideration
-func (dm *DragManager) EndDrag() error {
+func (dm *DragManager) EndDrag() (incoming, target interface{}, err error) {
     // end the drag no matter what
     t, i := dm.Target, dm.Incoming
     dm.Target, dm.Incoming = nil, nil
 
     if !dm.Dragging {
-        return errors.New("Cannot end drag: not currently dragging")
+        return nil, nil, errors.New("Cannot end drag: not currently dragging")
     }
     dm.Dragging = false
 
     if i == nil {
-        return errors.New("Cannot end drag: no incoming window")
+        return nil, nil, errors.New("Cannot end drag: no incoming window")
     }
 
     if t == nil {
-        return errors.New("Cannot end drag: no target window")
+        return nil, nil, errors.New("Cannot end drag: no target window")
     }
-    return nil
+    return i, t, nil
 }
