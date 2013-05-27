@@ -163,6 +163,16 @@ const (
     Left
 )
 
+// lol a string method
+// TODO: support directions that have been masked together to form things like TopLeft, etc
+func (d Direction) String() string {
+    if d == Top { return "Top" }
+    if d == Right { return "Right" }
+    if d == Bottom { return "Bottom" }
+    if d == Left { return "Left" }
+    return "Unknown Direction"
+}
+
 // Put the incoming window on the `dir` side of the target,
 // and transform the orthagonal dimension (eg, if `dir` is Up, then dim is `Width`
 // to be the same as the target's dimension

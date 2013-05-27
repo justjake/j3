@@ -33,7 +33,7 @@ const (
     MoveKeyCombo = ui.KeyOption + "-Shift-1"
 
     // Look-and-feel options
-    BackgroundColor = 0xcccccc  // in hexadecimal #ff00ff style
+    BackgroundColor = 0x262626  // in hexadecimal #ff00ff style
     IconMargin = 15 // space between icons and border
     IconPadding = 25 // space between two icons
 )
@@ -46,6 +46,25 @@ var (
     // TODO: IconWidth and IconHeight replace IconSize
     IconSize = assets.Swap.Bounds().Dx() // assume square icons
 )
+
+func makeCross(X *xgbutil.XUtil) *ui.Cross {
+    // create a basic cross. We will have to initalize the window later.
+    cross_ui := ui.NewCross(assets.Named, IconSize, IconMargin, IconPadding)
+    vert_icons :=  []string{"ShoveTop", "SplitTop", "Swap", "SplitBottom", "ShoveBottom"}
+    horiz_icons := []string{"ShoveLeft", "SplitLeft", "Swap", "SplitRight", "ShoveRight"}
+
+    _, err := cross_ui.CreateWindow(X, len(vert_icons), BackgroundColor)
+    util.Fatal(err)
+
+    // position icons on the cross
+    offset := IconMargin + 2 * (IconSize + IconPadding)
+    cross_ui.LayoutHorizontalIcons(horiz_icons, offset)
+    cross_ui.LayoutVerticalIcons(vert_icons, offset)
+
+    return cross_ui
+}
+
+
 
 func main() {
 
@@ -66,18 +85,9 @@ func main() {
     fatal(err)
     log.Printf("Window manager: %s\n", wm_name)
 
-    // create a basic cross. We will have to initalize the window later.
-    cross_ui := ui.NewCross(assets.Named, IconSize, IconMargin, IconPadding)
-    vert_icons :=  []string{"ShoveTop", "SplitTop", "Swap", "SplitBottom", "ShoveBottom"}
-    horiz_icons := []string{"ShoveLeft", "SplitLeft", "Swap", "SplitRight", "ShoveRight"}
-
-    cross, err := cross_ui.CreateWindow(X, len(vert_icons), BackgroundColor)
-    fatal(err)
-
-    // position icons on the cross
-    offset := IconMargin + 2 * (IconSize + IconPadding)
-    cross_ui.LayoutHorizontalIcons(horiz_icons, offset)
-    cross_ui.LayoutVerticalIcons(vert_icons, offset)
+    // create the cross UI
+    cross_ui := makeCross(X)
+    cross := cross_ui.Window
 
     // map the icons on the cross the the actions they should perform 
     // when objects are dropped over them
@@ -148,7 +158,7 @@ func main() {
     handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
         exit_early := false
         // get icon we are dropping over
-        icon_win, err := wm.FindNextUnderMouse(X, cross.Id)
+        icon_win, _, err := wm.FindNextUnderMouse(X, cross.Id)
         if err != nil {
             log.Printf("DragEnd: icon not found: %v\n", err)
             exit_early = true
@@ -176,10 +186,8 @@ func main() {
                 if target_id, t_ok := target.(xproto.Window); t_ok {
                     t_win := xwindow.New(X, target_id)
 
-
                     // perform the action!
                     action(t_win, inc_win)
-
 
                 } else {
                     log.Println("DragEnd: target type error (was %v)\n", target)
@@ -196,6 +204,10 @@ func main() {
         handleDragStart, 
         handleDragStep, 
         handleDragEnd)
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Window resizing behavior spike
+    ManageResizingWindows(X)
 
     // start event loop, even though we have no events
     // to keep app from just closing

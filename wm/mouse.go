@@ -35,16 +35,16 @@ func TranslateCoordinatesSync(X *xgbutil.XUtil, src, dest xproto.Window, x, y in
 }
 
 // wrapper around xproto.QueryPointer that performs a simple synchronous query
-func FindNextUnderMouse(X *xgbutil.XUtil, parent xproto.Window) (xproto.Window, error) {
+func FindNextUnderMouse(X *xgbutil.XUtil, parent xproto.Window) (xproto.Window, *xproto.QueryPointerReply, error) {
     // start query pointer request
     cookie := xproto.QueryPointer(X.Conn(), parent)
 
     // block and get reply for client
     reply, err := cookie.Reply()
     if err != nil {
-        return 0, err
+        return 0, nil, err
     }
-    return reply.Child, nil
+    return reply.Child, reply, nil
 }
 
 // find the EWHM window under the mouse cursor
@@ -69,7 +69,7 @@ func FindManagedWindowUnderMouse(X *xgbutil.XUtil) (xproto.Window, error) {
             return cur_window, nil
         }
 
-        cur_window, err = FindNextUnderMouse(X, cur_window)
+        cur_window, _, err = FindNextUnderMouse(X, cur_window)
         if err != nil {
             break
         }
@@ -82,7 +82,7 @@ func FindManagedWindowUnderMouse(X *xgbutil.XUtil) (xproto.Window, error) {
 func FindWindowUnderMouse(X *xgbutil.XUtil, orig_window *xproto.Window) (xproto.Window, error) {
     var cur_window xproto.Window = 0
     for {
-        cur_window, err := FindNextUnderMouse(X, cur_window)
+        cur_window, _, err := FindNextUnderMouse(X, cur_window)
         if err != nil {
             log.Printf("FindUnderMouse: deep query error: %v\n", err)
             if cur_window != 0 {
