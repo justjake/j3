@@ -40,7 +40,6 @@ func Bound(rects []xrect.Rect) (xrect.Rect) {
 
 // compose a number of rectabgles into a window shape
 func ComposeShape(X *xgbutil.XUtil, dst xproto.Window, rects []xrect.Rect) (err error) {
-    log.Println("Constructing shape.")
 
     combine_bounds := make([]shape.CombineCookie, len(rects))
     combine_clip   := make([]shape.CombineCookie, len(rects))

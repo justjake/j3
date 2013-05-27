@@ -22,25 +22,31 @@ import (
 )
 
 
-// CONFIGURATION
-// Opt-Shift-LeftMouseButton drags activate j3!
-const KeyCombo = ui.KeyOption + "-Shift-1"
+
+// CONFIGURATION //////////////////////////////////////////////////////////////
+// feel free to change the values here to customize j3
 
 const (
-    StripBackgroundColor = 0xcccccc
+    // Opt-Shift-LeftMouseButton drags activate j3!
+    // MoveKeyCombo is the binding used for j3's window movement functions
+    // it is in the format (MOD_NAME-)+[1-5]
+    // where MOD_NAME is any X11 keyname, and 1-5 is the mouse button number
+    MoveKeyCombo = ui.KeyOption + "-Shift-1"
+
+    // Look-and-feel options
+    BackgroundColor = 0xcccccc  // in hexadecimal #ff00ff style
     IconMargin = 15 // space between icons and border
     IconPadding = 25 // space between two icons
 )
+
+// CONFIGURATION //////////////////////////////////////////////////////////////
+
+
 
 var (
     // TODO: icons are not square. Make the geometry calculations right!
     // TODO: IconWidth and IconHeight replace IconSize
     IconSize = assets.Swap.Bounds().Dx() // assume square icons
-    ActionStripWidth = IconMargin * 2 + IconSize   // action strips in vertical orientation
-    ActionStripHeight = IconSize * 5 + IconPadding * 4 + IconMargin * 2 // 5 icons with margin between and at top and bottom 
-
-    StripGeometryHorizontal = xrect.New(0, 0, ActionStripHeight, ActionStripWidth)
-    StripGeometryVertical = xrect.New(0, 0, ActionStripWidth, ActionStripHeight)
 )
     
 
@@ -196,7 +202,7 @@ func main() {
 
 
     // define handlers for the three parts of any drag-drop operation
-    dm := ui.DragManager{}
+    dm := DragManager{}
     handleDragStart := func(X *xgbutil.XUtil, rx, ry, ex, ey int) (cont bool, cursor xproto.Cursor) {
         // find the window we are trying to drag
         win, err := wm.FindManagedWindowUnderMouse(X)

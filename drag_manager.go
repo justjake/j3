@@ -1,4 +1,4 @@
-package ui
+package main
 import "errors"
 
 // Tracks both components of any drag-and-drop operation:

@@ -32,6 +32,7 @@ type Icon struct {
     Window  *xwindow.Window     // window that the icon is drawn to
     ximage  *xgraphics.Image    // X11 image swap buffer, used to paint Image to Window
     state   IconState
+    Background color.Color
 }
 
 // Create a new Icon from an image, with a given X11 window parent
@@ -39,7 +40,7 @@ func NewIcon(X *xgbutil.XUtil, img image.Image, parent xproto.Window) *Icon {
     ximg := xgraphics.NewConvert(X, img)
     win := ximg.Window(parent)
     fader := fadeImage{img, 1.0}
-    icn := Icon{&fader, parent, win, ximg, StateNormal}
+    icn := Icon{&fader, parent, win, ximg, StateNormal, color.RGBA{0xcc, 0xcc, 0xcc, 0xff}}
     return &icn
 }
 
@@ -48,7 +49,7 @@ func NewIcon(X *xgbutil.XUtil, img image.Image, parent xproto.Window) *Icon {
 // TODO actually do this
 func (icn *Icon) getBackground() image.Image {
     log.Println("TODO: Icon.Blend()")
-    bg_color := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
+    bg_color := icn.Background
     bg := image.NewUniform(bg_color)
     return bg
 }
