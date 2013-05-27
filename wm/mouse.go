@@ -21,6 +21,19 @@ import (
     "log"
 )
 
+// translate an X, Y value from one window to the euclidean space of another. Useful for translating
+// the arbitrary position of some window's (0,0) point into root window space
+func TranslateCoordinatesSync(X *xgbutil.XUtil, src, dest xproto.Window, x, y int) (dest_x, dest_y int, err error) {
+    Xx, Xy := int16(x), int16(y)
+    cookie := xproto.TranslateCoordinates(X.Conn(), src, dest, Xx, Xy)
+    reply, err := cookie.Reply()
+    if err != nil {
+        return 0, 0, err
+    }
+    dest_x, dest_y = int(reply.DstX), int(reply.DstY)
+    return
+}
+
 // wrapper around xproto.QueryPointer that performs a simple synchronous query
 func FindNextUnderMouse(X *xgbutil.XUtil, parent xproto.Window) (xproto.Window, error) {
     // start query pointer request
