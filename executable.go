@@ -37,7 +37,7 @@ const (
 
     // how far apart the edges of two windows can be before they are no longer
     // considered adjacent edges
-    AdjacencyEpsilon = 2
+    AdjacencyEpsilon = 6
 
     // if true, j3 will try to resize windows as the mouse cursor moves. This works 
     // well under some window managers (like Openbox), but performs horribly

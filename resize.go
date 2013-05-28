@@ -211,7 +211,7 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         // get coordinate part for the edge. this is either X or Y.
         target_edge := EdgePos(geom, dir)
 
-        log.Printf("ResizeStart: click at (%v, %v). Direction: %s\n Edge: %d\n", x, y, dir.String(), target_edge)
+        log.Printf("ResizeStart: on window %v - %v. Direction/edge: %v/%v\n", win, geom, dir, target_edge)
 
         // find adjacent windows
         adjacent := list.New()
@@ -238,7 +238,7 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
                 }
 
                 cand_edge := EdgePos(cand_geom, dir.Opposite())
-                if abs(cand_edge - target_edge) < AdjacencyEpsilon {
+                if abs(cand_edge - target_edge) <= AdjacencyEpsilon {
                     // cool, edges are touching.
                     // make sure this window isn't totally above or below the candidate
                     // we do so by constructing a rect using the clicked window's edge
@@ -256,7 +256,7 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
                     }
                     // if a window has made it to here, it is adgacent!
                     // add it to the list
-                    log.Printf("ResizeStart: window adjacent: %v\n", cand_window)
+                    log.Printf("ResizeStart: will resize adjacent window: %v - %v\n", candidate_id, cand_geom)
                     adjacent.PushBack(cand_window)
                 }
             }
@@ -301,7 +301,7 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         // handles issues with terminal hints
         target_geom_a, err := DRAG_DATA.Window.DecorGeometry()
         if err != nil {
-            log.Printf("Geom retrieve err: %v\n", err)
+            log.Printf("ResizeStep: Geom retrieve err: %v\n", err)
             return
         }
         target_edge_a := EdgePos(target_geom_a, DRAG_DATA.Direction)
@@ -340,7 +340,16 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
     }
 
     handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
-        handleResize(rx, ry)
+        // only run on high enough deltas.
+        // use the adjacency epsilon here too
+        delta := abs(rx - DRAG_DATA.LastX)
+        if DRAG_DATA.Direction == wm.Top || DRAG_DATA.Direction == wm.Bottom {
+            delta = abs(ry - DRAG_DATA.LastY)
+        }
+
+        if delta > AdjacencyEpsilon {
+            handleResize(rx, ry)
+        }
         DRAG_DATA = nil
     }
 
