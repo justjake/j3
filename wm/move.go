@@ -173,6 +173,17 @@ func (d Direction) String() string {
     return "Unknown Direction"
 }
 
+func (d Direction) Opposite() Direction {
+    switch d {
+    case Top: return Bottom
+    case Bottom: return Top
+    case Left: return Right
+    case Right: return Left
+    }
+    log.Panic("Direction.Opposite: Unreachable")
+    return 0
+}
+
 // Put the incoming window on the `dir` side of the target,
 // and transform the orthagonal dimension (eg, if `dir` is Up, then dim is `Width`
 // to be the same as the target's dimension
