@@ -30,7 +30,19 @@ const (
     // MoveKeyCombo is the binding used for j3's window movement functions
     // it is in the format (MOD_NAME-)+[1-5]
     // where MOD_NAME is any X11 keyname, and 1-5 is the mouse button number
-    MoveKeyCombo = ui.KeyOption + "-Shift-1"
+    KeyComboMove = ui.KeyOption+"-Shift-1"
+
+    // key combination to activate j3's resizing mode
+    KeyComboResize = ui.KeyOption+"-Control-1"
+
+    // how far apart the edges of two windows can be before they are no longer
+    // considered adjacent edges
+    AdjacencyEpsilon = 2
+
+    // if true, j3 will try to resize windows as the mouse cursor moves. This works 
+    // well under some window managers (like Openbox), but performs horribly
+    // under others, like Fluxbox
+    DynamicDragResize = false
 
     // Look-and-feel options
     BackgroundColor = 0x262626  // in hexadecimal #ff00ff style
@@ -200,7 +212,7 @@ func main() {
         }
     }
 
-    mousebind.Drag(X, X.RootWin(), X.RootWin(), MoveKeyCombo, true, 
+    mousebind.Drag(X, X.RootWin(), X.RootWin(), KeyComboMove, true, 
         handleDragStart, 
         handleDragStep, 
         handleDragEnd)

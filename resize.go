@@ -14,20 +14,10 @@ import (
     "github.com/BurntSushi/xgbutil/ewmh"
 
     "github.com/justjake/j3/wm"
-    "github.com/justjake/j3/ui"
 
     "container/list"
     "fmt"
     "log"
-)
-
-const (
-    // key combination to activate j3's resizing mode
-    KeyComboResize = ui.KeyOption+"-Control-1"
-
-    // how far apart the edges of two windows can be before they are no longer
-    // considered adjacent edges
-    AdjacencyEpsilon = 2
 )
 
 func rect_equals(a, b xrect.Rect) bool {
@@ -344,8 +334,9 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
     }
 
     handleDragStep := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
-        // nothingness
-        handleResize(rx, ry)
+        if DynamicDragResize {
+            handleResize(rx, ry)
+        }
     }
 
     handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
