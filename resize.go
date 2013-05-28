@@ -20,6 +20,9 @@ import (
     "time"
 )
 
+// maximum time to wait for a window manager to finish resizing a window
+const ResizeWindowTimeout = time.Millisecond * 100
+
 func rect_equals(a, b xrect.Rect) bool {
     return a.X() == b.X() && a.Y() == b.Y() && a.Width() == b.Width() && a.Height() == b.Height()
 }
@@ -32,22 +35,31 @@ type GeometryUpdate struct {
 // we issue a resize or move request. This function polls for a change in the window dimensions
 //
 // this function is kina a horrible hack, and kinda a cool thing about Go.
-func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, updates chan *GeometryUpdate) {
+func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, timeout time.Duration,
+     updates chan *GeometryUpdate) {
     update := GeometryUpdate{}
+    timeout_channel := time.After(timeout)
     for {
-        new_geom, err := win.DecorGeometry()
-        if err != nil {
-            update.Error = fmt.Errorf("Resize: coudn't get decorated geometry: %v", err)
-            updates <- &update
+        select {
+        default:
+            new_geom, err := win.DecorGeometry()
+            if err != nil {
+                update.Error = fmt.Errorf("Resize: coudn't get decorated geometry: %v", err)
+                updates <- &update
+                return
+            }
+            if !rect_equals(new_geom, old_geom) {
+                // the window has now changed size
+                update.Geometry = new_geom
+                updates <- &update
+                return
+            }
+            time.Sleep(time.Millisecond)
+        case <-timeout_channel:
+            update.Error = fmt.Errorf("Resize: timeout; no geometry change after %v.", timeout)
+            updates <-&update
             return
         }
-        if !rect_equals(new_geom, old_geom) {
-            // the window has now changed size
-            update.Geometry = new_geom
-            updates <- &update
-            return
-        }
-        time.Sleep(time.Millisecond)
     }
 }
 
@@ -93,7 +105,7 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     // we use a goroutine to query X a bunch while waiting for the window
     // to finish resizing
     updates := make(chan *GeometryUpdate)
-    go WaitForGeometryUpdate(win, pre_decor, updates)
+    go WaitForGeometryUpdate(win, pre_decor, ResizeWindowTimeout, updates)
     update := <-updates
     if update.Error != nil {
         return update.Error
@@ -123,7 +135,7 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     if err != nil { return err }
 
     // sync until the window finishes moving
-    go WaitForGeometryUpdate(win, post_decor, updates)
+    go WaitForGeometryUpdate(win, post_decor, ResizeWindowTimeout, updates)
     _ = <-updates
 
     return nil
