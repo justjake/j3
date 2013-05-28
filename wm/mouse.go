@@ -18,7 +18,6 @@ import (
 
     "errors"
     "fmt"
-    "log"
 )
 
 // translate an X, Y value from one window to the euclidean space of another. Useful for translating

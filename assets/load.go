@@ -16,8 +16,7 @@ import (
 )
 
 var (
-
-    logger       *log.Logger = log.New(os.Stderr, "[assets]", log.LstdFlags | log.Lshortfile)
+    logger       *log.Logger = log.New(os.Stderr, "[assets] ", log.LstdFlags | log.Lshortfile)
 
     // icons indicating splitting a window in half, and moving a new window into the freed space
     SplitTop     imglib.Image = image(split_top_png)
@@ -71,7 +70,7 @@ func getName(any interface{}) string {
 // load an image from an asset function
 func image(load Loader) imglib.Image {
     name := getName(load)
-    logger.Printf("loading asset %s\n", name)
+    // logger.Printf("loading asset %s\n", name)
 
     // get asset byte data
     data := load()

@@ -17,7 +17,6 @@ import (
 
     "container/list"
     "fmt"
-    "log"
     "time"
 )
 
@@ -54,7 +53,8 @@ func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, updates cha
 
 
 
-// TODO support multi-direction resize with bit masks
+// resize a window by a certain number of pixels in a given direction.
+// This function tries to prevent the window from moving 
 func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px int) error {
     // we resize around the decor_geometry of the window
 
@@ -218,9 +218,7 @@ type ResizeDrag struct {
 }
 
 
-// resize windows with 
 func ManageResizingWindows(X *xgbutil.XUtil) {
-    // var dragged *Edge
 
     var DRAG_DATA *ResizeDrag
 
@@ -391,7 +389,7 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
     }
 
     handleDragEnd := func(X *xgbutil.XUtil, rx, ry, ex, ey int) {
-        // only run on high enough deltas.
+        // only run on high enough deltas. Prevents windows from resizing when the user has gone "nah."
         // use the adjacency epsilon here too
         delta := abs(rx - DRAG_DATA.LastX)
         if DRAG_DATA.Direction == wm.Top || DRAG_DATA.Direction == wm.Bottom {
@@ -400,7 +398,11 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
 
         if delta > AdjacencyEpsilon {
             handleResize(rx, ry)
+        } else {
+            log.Printf("ResizeEnd: delta %v less than epsilon %v, skipping resize\n", delta, AdjacencyEpsilon)
         }
+
+
         DRAG_DATA = nil
     }
 

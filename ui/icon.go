@@ -9,7 +9,6 @@ import (
     "github.com/BurntSushi/xgbutil/xgraphics"
     "github.com/BurntSushi/xgbutil/xwindow"
 
-    "log"
     "image"
     "image/color"
 )
@@ -48,7 +47,6 @@ func NewIcon(X *xgbutil.XUtil, img image.Image, parent xproto.Window) *Icon {
 // right now just returns an image.Uniform hard-coded to the right shade of grey
 // TODO actually do this
 func (icn *Icon) getBackground() image.Image {
-    log.Println("TODO: Icon.Blend()")
     bg_color := icn.Background
     bg := image.NewUniform(bg_color)
     return bg

@@ -6,9 +6,11 @@ package wm
    */
 import (
     "github.com/BurntSushi/xgbutil/xwindow"
-
-    "log"
+    logLib "log"
+    "os"
 )
+
+var log = logLib.New(os.Stderr, "[window manager] ", logLib.LstdFlags | logLib.Lshortfile)
 
 type WindowInteraction func(*xwindow.Window, *xwindow.Window) (error)
 

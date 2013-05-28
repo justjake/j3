@@ -12,7 +12,8 @@ import (
     "github.com/BurntSushi/xgbutil/xwindow"
     "github.com/BurntSushi/xgbutil/mousebind"
 
-    "log"
+    logLib "log"
+    "os"
 
     "github.com/justjake/j3/assets"
     "github.com/justjake/j3/ui"
@@ -42,6 +43,9 @@ const (
     // if true, j3 will try to resize windows as the mouse cursor moves. This works 
     // well under some window managers (like Openbox), but performs horribly
     // under others, like Fluxbox
+    //
+    // TODO: implement per-window resize locks to prevent the race conditions
+    // that make dynamic updates unfeasable in Fluxbox
     DynamicDragResize = false
 
     // Look-and-feel options
@@ -57,6 +61,8 @@ var (
     // TODO: icons are not square. Make the geometry calculations right!
     // TODO: IconWidth and IconHeight replace IconSize
     IconSize = assets.Swap.Bounds().Dx() // assume square icons
+
+    log = logLib.New(os.Stderr, "[j3] ", logLib.LstdFlags | logLib.Lshortfile)
 )
 
 func makeCross(X *xgbutil.XUtil) *ui.Cross {
