@@ -18,16 +18,50 @@ import (
     "container/list"
     "fmt"
     "log"
+    "time"
 )
 
 func rect_equals(a, b xrect.Rect) bool {
     return a.X() == b.X() && a.Y() == b.Y() && a.Width() == b.Width() && a.Height() == b.Height()
 }
 
+type GeometryUpdate struct {
+    Geometry    xrect.Rect
+    Error       error
+}
+// Sometimes window managers are really slow about upating window geometry and position after 
+// we issue a resize or move request. This function polls for a change in the window dimensions
+//
+// this function is kina a horrible hack, and kinda a cool thing about Go.
+func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, updates chan *GeometryUpdate) {
+    update := GeometryUpdate{}
+    for {
+        new_geom, err := win.DecorGeometry()
+        if err != nil {
+            update.Error = fmt.Errorf("Resize: coudn't get decorated geometry: %v", err)
+            updates <- &update
+            return
+        }
+        if !rect_equals(new_geom, old_geom) {
+            // the window has now changed size
+            update.Geometry = new_geom
+            updates <- &update
+            return
+        }
+        time.Sleep(time.Millisecond)
+    }
+}
+
+
 
 // TODO support multi-direction resize with bit masks
 func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px int) error {
     // we resize around the decor_geometry of the window
+
+    if px == 0 {
+        // no need to resize
+        return nil
+    }
 
     geom, err := win.Geometry()
     if err != nil {
@@ -56,11 +90,15 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     if err != nil { return err }
 
     // wait for the geometry to change
-    var post_decor xrect.Rect
-    post_decor, err = win.DecorGeometry()
-    if err != nil {
-        return fmt.Errorf("Resize: coudn't get decorated geometry: %v", err)
+    // we use a goroutine to query X a bunch while waiting for the window
+    // to finish resizing
+    updates := make(chan *GeometryUpdate)
+    go WaitForGeometryUpdate(win, pre_decor, updates)
+    update := <-updates
+    if update.Error != nil {
+        return update.Error
     }
+    post_decor := update.Geometry
 
     // the opposite edge should stay in the same place
     op := dir.Opposite()
@@ -83,6 +121,10 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     // move to lock opposite edge
     err = win.WMMove(x, y)
     if err != nil { return err }
+
+    // sync until the window finishes moving
+    go WaitForGeometryUpdate(win, post_decor, updates)
+    _ = <-updates
 
     return nil
 }
@@ -297,8 +339,10 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
             log.Printf("ResizeStep: can't resize target: %v\n", err)
             return
         }
-        // calculate actual delta that occured
-        // handles issues with terminal hints
+
+        // calculate actual delta that occured, for resizing the adjacent windows
+        // handles issues with window sizing hints on windows like terminals
+        // making big differences for us
         target_geom_a, err := DRAG_DATA.Window.DecorGeometry()
         if err != nil {
             log.Printf("ResizeStep: Geom retrieve err: %v\n", err)
@@ -315,13 +359,20 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         for e := DRAG_DATA.Adjacent.Front(); e != nil; e = e.Next() {
             // extract window from the linked list
             adj_win := e.Value.(*xwindow.Window)
+            adj_geom, err := adj_win.DecorGeometry()
+            if err != nil {
+                log.Printf("ResizeStep: can't query adjacent window %v geometry: %v", adj_win, err)
+            }
 
+            log.Printf("ResizeStep: resizing adjacent window %v - %v: edge/delta %v/%v\n", adj_win.Id, adj_geom, DRAG_DATA.Direction.Opposite(), -delta)
             // resize in the opposite direction, with the opposite delta
             // except the delta should be some actual delta calculated from our source window,
             // because issues with terminal windows happen
-
-
             err = ResizeDirection(X, adj_win, DRAG_DATA.Direction.Opposite(), -delta)
+            // then to garuntee the edges touch...
+            AdjoinEdge(DRAG_DATA.Window, adj_win, DRAG_DATA.Direction)
+
+
             if err != nil {
                 log.Printf("ResizeStep: can't resize adjacent window %v: %v\n", adj_win, err)
                 continue
