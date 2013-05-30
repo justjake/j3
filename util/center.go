@@ -30,4 +30,8 @@ func CenterChild(child, parent Rect) (x, y int) {
     return
 }
 
+func RectEquals(a, b Rect) bool {
+    return a.X() == b.X() && a.Y() == b.Y() && a.Width() == b.Width() && a.Height() == b.Height()
+}
+
 

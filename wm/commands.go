@@ -55,14 +55,14 @@ func splitVertical(target, incoming *xwindow.Window, incomingOnTop bool) error {
     }
 
     // target goes on bottom...
-    err = bottom.WMMoveResize(bounds.X(), bounds.Y() + top_height, bounds.Width(), bottom_height)
+    err = MoveResize(bottom, bounds.X(), bounds.Y() + top_height, bounds.Width(), bottom_height)
     if err != nil {
         log.Printf("splitVertical: error configuring bottom: %v\n", err)
         return err
     }
 
     // and incoming on top
-    err = top.WMMoveResize(bounds.X(), bounds.Y(), bounds.Width(), top_height)
+    err = MoveResize(top, bounds.X(), bounds.Y(), bounds.Width(), top_height)
     if err != nil {
         log.Printf("splitVertical: error configuring top: %v\n", err)
         return err
@@ -92,13 +92,13 @@ func splitHorizontal(target, incoming *xwindow.Window, incomingOnLeft bool) erro
         right = incoming
     }
 
-    err = right.WMMoveResize(bounds.X() + left_width, bounds.Y(), right_width, bounds.Height())
+    err = MoveResize(right, bounds.X() + left_width, bounds.Y(), right_width, bounds.Height())
     if err != nil {
         log.Printf("splitHorizontal: error configuring right: %v\n", err)
         return err
     }
 
-    err = left.WMMoveResize(bounds.X(), bounds.Y(), left_width, bounds.Height())
+    err = MoveResize(left, bounds.X(), bounds.Y(), left_width, bounds.Height())
     if err != nil {
         log.Printf("splitHorizontal: error configuring left: %v\n", err)
         return err
@@ -142,12 +142,14 @@ func Swap(target, incoming *xwindow.Window) error {
     }
 
     // configure windows, easy as pie!
-    err = target.WMMoveResize(incoming_bounds.Pieces())
+    err = MoveResize(target, incoming_bounds.X(), incoming_bounds.Y(), 
+        incoming_bounds.Width(), incoming_bounds.Height())
     if err != nil {
         log.Printf("Swap: error configuring target: %v\n", err)
         return err
     }
-    err = incoming.WMMoveResize(target_bounds.Pieces())
+    err = MoveResize(incoming, target_bounds.X(), target_bounds.Y(),
+        target_bounds.Width(), target_bounds.Height())
     if err != nil {
         log.Printf("Swap: error configuring incoming: %v\n", err)
         return err
@@ -201,22 +203,22 @@ func Shove(target, incoming *xwindow.Window, dir Direction) error {
 
     // move in the correct direction
     if dir == Top {
-        err := incoming.WMMoveResize(t.X(), t.Y() - i.Height(), t.Width(), i.Height())
+        err := MoveResize(incoming, t.X(), t.Y() - i.Height(), t.Width(), i.Height())
         if err != nil { return err }
     }
 
     if dir == Bottom {
-        err := incoming.WMMoveResize(t.X(), t.Y() + t.Height(), t.Width(), i.Height())
+        err := MoveResize(incoming, t.X(), t.Y() + t.Height(), t.Width(), i.Height())
         if err != nil { return err }
     }
 
     if dir == Left {
-        err := incoming.WMMoveResize(t.X() - i.Width(), t.Y(), i.Width(), t.Height())
+        err := MoveResize(incoming, t.X() - i.Width(), t.Y(), i.Width(), t.Height())
         if err != nil { return err }
     }
 
     if dir == Right {
-        err := incoming.WMMoveResize(t.X() + t.Width(), t.Y(), i.Width(), t.Height())
+        err := MoveResize(incoming, t.X() + t.Width(), t.Y(), i.Width(), t.Height())
         if err != nil { return err }
     }
 

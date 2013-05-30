@@ -25,48 +25,6 @@ import (
 // maximum time to wait for a window manager to finish resizing a window
 const ResizeWindowTimeout = time.Millisecond * 100
 
-func rect_equals(a, b xrect.Rect) bool {
-    return a.X() == b.X() && a.Y() == b.Y() && a.Width() == b.Width() && a.Height() == b.Height()
-}
-
-type GeometryUpdate struct {
-    Geometry    xrect.Rect
-    Error       error
-}
-// Sometimes window managers are really slow about upating window geometry and position after 
-// we issue a resize or move request. This function polls for a change in the window dimensions
-//
-// this function is kina a horrible hack, and kinda a cool thing about Go.
-func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, timeout time.Duration,
-     updates chan *GeometryUpdate) {
-    update := GeometryUpdate{}
-    timeout_channel := time.After(timeout)
-    for {
-        select {
-        default:
-            new_geom, err := win.DecorGeometry()
-            if err != nil {
-                update.Error = fmt.Errorf("Resize: coudn't get decorated geometry: %v", err)
-                updates <- &update
-                return
-            }
-            if !rect_equals(new_geom, old_geom) {
-                // the window has now changed size
-                update.Geometry = new_geom
-                updates <- &update
-                return
-            }
-            time.Sleep(time.Millisecond)
-        case <-timeout_channel:
-            update.Error = fmt.Errorf("Resize: timeout; no geometry change after %v.", timeout)
-            updates <-&update
-            return
-        }
-    }
-}
-
-
-
 // resize a window by a certain number of pixels in a given direction.
 // This function tries to prevent the window from moving 
 func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px int) error {
@@ -106,13 +64,8 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     // wait for the geometry to change
     // we use a goroutine to query X a bunch while waiting for the window
     // to finish resizing
-    updates := make(chan *GeometryUpdate)
-    go WaitForGeometryUpdate(win, pre_decor, ResizeWindowTimeout, updates)
-    update := <-updates
-    if update.Error != nil {
-        return update.Error
-    }
-    post_decor := update.Geometry
+    post_decor, err := wm.WaitForGeometryUpdate(win, pre_decor, ResizeWindowTimeout)
+    if err != nil { return err }
 
     // the opposite edge should stay in the same place
     op := dir.Opposite()
@@ -133,13 +86,8 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     }
 
     // move to lock opposite edge
-    err = win.WMMove(x, y)
+    err = wm.Move(win, x, y)
     if err != nil { return err }
-
-    // sync until the window finishes moving
-    go WaitForGeometryUpdate(win, post_decor, ResizeWindowTimeout, updates)
-    _ = <-updates
-
     return nil
 }
 
@@ -208,9 +156,9 @@ func AdjoinEdge(target, incoming *xwindow.Window, dir wm.Direction) error {
     delta := EdgePos(t, dir) - EdgePos(i, dir.Opposite())
 
     if dir == wm.Left || dir == wm.Right {
-        return incoming.WMMove(delta + i.X(), i.Y())
+        return wm.Move(incoming, delta + i.X(), i.Y())
     } else {
-        return incoming.WMMove(i.X(), delta + i.Y())
+        return wm.Move(incoming, i.X(), delta + i.Y())
     }
     return nil
 }
@@ -427,26 +375,38 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         if err != nil { log.Println(err); return }
         win := xwindow.New(X, clicked)
 
-        names := []string{"PreDecor", "PostDecor", "Pre", "Post"}
+        names := []string{"PreDecor", "PostDecorPreMove", "PostDecor", "Pre", "Post"}
         geometries := make(map[string]xrect.Rect, 4)
 
         
         // take measurements
-        geo, err := win.DecorGeometry()
+        pre_decor, err := win.DecorGeometry()
         if err != nil {
             log.Printf("Error fetching pre DecorGeom: %v\n", err)
         }
-        geometries["PreDecor"] = geo
+        geometries["PreDecor"] = pre_decor
 
-        geo, err = win.Geometry()
+        geo, err := win.Geometry()
         if err != nil {
             log.Printf("Error fetching pre Geom: %v\n", err)
         }
         geometries["Pre"] = geo
 
         // resize vertically by 1px
-        log.Println("Resizing using window.Geometry() + 1, not DecorGeometry() + 1")
-        err = win.WMResize(geo.Width(), geo.Height() + 1)
+        log.Println("Resizing using window.Geometry() + 50, not DecorGeometry() + 1")
+        //err = win.WMResize(geo.Width() + 50, geo.Height())
+        if err != nil {
+            log.Println(err)
+        }
+        // wait to finish
+        post_decor_pre_move, err := wm.WaitForGeometryUpdate(win, pre_decor, ResizeWindowTimeout)
+        if err != nil {
+            log.Println(err)
+            post_decor_pre_move = pre_decor
+        }
+        geometries["PostDecorPreMove"] = post_decor_pre_move
+        // move zero pixels, then wait
+        wm.Move(win, post_decor_pre_move.X(), post_decor_pre_move.Y())
 
         geo, err = win.DecorGeometry()
         if err != nil {
@@ -463,6 +423,11 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         for _, k := range names {
             log.Printf("%s: %v\n", k, geometries[k])
         }
+
+        // release X events
+        // needed if the event binding is synchronous
+        // see http://godoc.burntsushi.net/pkg/github.com/BurntSushi/xgbutil/mousebind/#hdr-When_to_use_a_synchronous_binding
+        // xproto.AllowEvents(X.Conn(), xproto.AllowReplayPointer, 0)
     }
 
 
@@ -473,6 +438,6 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         handleDragStep, 
         handleDragEnd)
 
-    mousebind.ButtonPressFun(resizeBugHunt).Connect(X, X.RootWin(), ui.KeyOption+"-Shift-Control-1", true, true)
+    mousebind.ButtonPressFun(resizeBugHunt).Connect(X, X.RootWin(), ui.KeyOption+"-Shift-Control-1", false, true)
 
 }
