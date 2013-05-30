@@ -12,8 +12,10 @@ import (
     "github.com/BurntSushi/xgbutil/xwindow"
     "github.com/BurntSushi/xgbutil/mousebind"
     "github.com/BurntSushi/xgbutil/ewmh"
+    "github.com/BurntSushi/xgbutil/xevent"
 
     "github.com/justjake/j3/wm"
+    "github.com/justjake/j3/ui" // temporary, for bug hunting
 
     "container/list"
     "fmt"
@@ -406,10 +408,59 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
         DRAG_DATA = nil
     }
 
+    // resizes the window by 1px vertically, then observes the actual change
+    resizeBugHunt := func(X* xgbutil.XUtil, ev xevent.ButtonPressEvent) {
+        // get xwindow from click
+        clicked, err := wm.FindManagedWindowUnderMouse(X)
+        if err != nil { log.Println(err); return }
+        win := xwindow.New(X, clicked)
+
+        names := []string{"PreDecor", "PostDecor", "Pre", "Post"}
+        geometries := make(map[string]xrect.Rect, 4)
+
+        
+        // take measurements
+        geo, err := win.DecorGeometry()
+        if err != nil {
+            log.Printf("Error fetching pre DecorGeom: %v\n", err)
+        }
+        geometries["PreDecor"] = geo
+
+        geo, err = win.Geometry()
+        if err != nil {
+            log.Printf("Error fetching pre Geom: %v\n", err)
+        }
+        geometries["Pre"] = geo
+
+        // resize vertically by 1px
+        log.Println("Resizing using window.Geometry() + 1, not DecorGeometry() + 1")
+        err = win.WMResize(geo.Width(), geo.Height() + 1)
+
+        geo, err = win.DecorGeometry()
+        if err != nil {
+            log.Printf("Error fetching post DecorGeom: %v\n", err)
+        }
+        geometries["PostDecor"] = geo
+
+        geo, err = win.Geometry()
+        if err != nil {
+            log.Printf("Error fetching post Geom: %v\n", err)
+        }
+        geometries["Post"] = geo
+
+        for _, k := range names {
+            log.Printf("%s: %v\n", k, geometries[k])
+        }
+    }
+
+
+
     // bind handler
     mousebind.Drag(X, X.RootWin(), X.RootWin(), KeyComboResize, true, 
         handleDragStart, 
         handleDragStep, 
         handleDragEnd)
+
+    mousebind.ButtonPressFun(resizeBugHunt).Connect(X, X.RootWin(), ui.KeyOption+"-Shift-Control-1", true, true)
 
 }
