@@ -10,60 +10,98 @@ import (
     "fmt"
 )
 
-var MoveResizeTimeout = time.Millisecond * 50
+var MoveResizeTimeout = time.Millisecond * 30
 
 // return channel type for WiatForGeometryUpdate
 type GeometryUpdate struct {
+    Base        xrect.Rect
     Geometry    xrect.Rect
     Error       error
 }
-// Sometimes window managers are really slow about upating window geometry and position after 
-// we issue a resize or move request. This function polls for a change in the window dimensions
-//
-// this function is kina a horrible hack, and kinda a cool thing about Go.
-func PollForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, timeout time.Duration,
-     updates chan *GeometryUpdate) {
-    update := GeometryUpdate{}
-    timeout_channel := time.After(timeout)
-    for {
-        select {
-        case <-timeout_channel:
-            update.Error = fmt.Errorf("PollForGeometryUpdate: timeout; no geometry change after %v.", timeout)
-            updates <-&update
-            return
-        default:
-            //log.Println("default action in WaitForGeometryUpdate")
-            new_geom, err := win.DecorGeometry()
-            if err != nil {
-                update.Error = fmt.Errorf("PollForGeometryUpdate: coudn't get decorated geometry: %v", err)
-                updates <- &update
-                return
-            }
-            if !util.RectEquals(new_geom, old_geom) {
-                // the window has now changed size
-                //log.Println("WaitForGeometryUpdate: did get resize, preparing to send update")
-                update.Geometry = new_geom
-                updates <- &update
-                return
-            }
-            time.Sleep(time.Millisecond)
-        }
+
+type TimeoutError struct {
+    // generic error message field
+    Message string
+    // how long we waited before producing this error
+    Timeout time.Duration
+}
+
+func (err *TimeoutError) Error() string {
+    return fmt.Sprintf("%s: timeout after %v.", err.Message, err.Timeout)
+}
+
+// A funciton for use with PollFor. Returning 'true' indicates success:
+// we are done polling without any errors.
+// Returning an error will immediatly stop polling, but the error will
+// be returned by PollFor for handling.
+type GeometryUpdateTester func(*xwindow.Window) (bool, error)
+
+// Returns True once the window's DecorGeometry changes
+// Use with PollFor.
+func DecorDiffers(oldDecor xrect.Rect) GeometryUpdateTester {
+    return func(win *xwindow.Window) (bool, error) {
+        newDecor, err := win.DecorGeometry()
+        if err != nil { return false, err }
+        return (!util.RectEquals(oldDecor, newDecor)), nil
     }
 }
 
-// simple wrapper around PollForGeometryUpdate that doesn't require goroutine and GeometryUpdate
-// unpacking every time
-func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, timeout time.Duration) (xrect.Rect, error) {
-    // start waiting
-    updates := make(chan *GeometryUpdate)
-    go PollForGeometryUpdate(win, old_geom, timeout, updates)
-
-    // unpack results
-    change := <-updates
-    if change.Error != nil { return nil, change.Error }
-    return change.Geometry, nil
+// Returns True once the window's Geometry changes
+// Use with PollFor.
+func GeometryDiffers(oldGeom xrect.Rect) GeometryUpdateTester {
+    return func(win *xwindow.Window) (bool, error) {
+        newGeom, err := win.Geometry()
+        if err != nil { return false, err }
+        return (!util.RectEquals(oldGeom, newGeom)), nil
+    }
 }
 
+
+// The previous PollForGeometryUpdate function and friends were very complex, and a bit brittle
+// PollFor and the GeometryUpdateTester generator functions GeometryDiffers and DecorDiffers
+// do the same job (polling for some change on a *xwindow.Window), usually a geometry change
+//
+// PollFor runs each GeometryUpdateTester in order until all return true *on the same run*. 
+// If any GeometryUpdateTester throws an error, PollFor stops and returns that error.
+// On a successful polling, PollFor returns 'nil' as its error
+func PollForTimeout(win *xwindow.Window, timeout time.Duration, changes ...GeometryUpdateTester) error {
+    timeout_channel := time.After(timeout)
+
+    for {
+        select {
+        case <-timeout_channel:
+            return &TimeoutError{"PollFor", timeout}
+        default:
+            // run each geometry test predicate
+            should_exit := true
+            for i, pred := range changes {
+                exit, err := pred(win)
+                if err != nil {
+                    return fmt.Errorf("PollFor: error in predicate %d: %v", i, err)
+                }
+                should_exit = should_exit && exit
+            }
+
+            // exit when all pass
+            if should_exit {
+                return nil
+            }
+
+            // don't spam the server
+            time.Sleep(time.Millisecond)
+        }
+    }
+
+    return fmt.Errorf("PollFor: should be unreachable")
+}
+
+// Same as PollForTimeout, except uses the default timeout.
+func PollFor(win *xwindow.Window, change_predicates ...GeometryUpdateTester) error {
+    return PollForTimeout(win, MoveResizeTimeout, change_predicates...)
+}
+
+
+// Sometimes window managers are really slow about 
 // re-implemented here because under Fluxbox, win.WMMove() results in the window
 // growing vertically by the height of the titlebar!
 // So we snapshot the size of the window before we move it, 
@@ -73,30 +111,55 @@ func WaitForGeometryUpdate(win *xwindow.Window, old_geom xrect.Rect, timeout tim
 // because it would be impossible to selectivley poll for just the move.
 func Move(win *xwindow.Window, x, y int) error {
     // snapshot both sorts of window geometries
-    decor_geom, err := win.DecorGeometry()
+    decor_geom, geom, err := Geometries(win)
     if err != nil { return err }
-
-    geom, err := win.Geometry()
-    if err != nil { return err }
+    log.Printf("Move: detected geometry to be %v\n", geom)
 
     // move the window, then wait for it to finish moving
     err = win.WMMove(x, y)
     if err != nil { return err }
 
-    post_move, err :=  WaitForGeometryUpdate(win, decor_geom, MoveResizeTimeout)
+    // this waits 30MS under non-Fluxbox window manager
+    // WHAT DO
+    err = PollFor(win, GeometryDiffers(geom))
+    if err != nil {
+        // if we had a timeout, that means that the geometry didn't derp during
+        // moving, and everything is A-OK!
+        // skip the rest of the function
+        if _, wasTimeout := err.(*TimeoutError); wasTimeout {
+            return nil
+        }
+        return err
+    }
+
+    // compare window widths before/after move
+    _, post_move_base, err := Geometries(win)
     if err != nil { return err }
 
-    // compare window widths
-    delta_w := decor_geom.Width() - post_move.Width()
-    delta_h := decor_geom.Height() - post_move.Height()
+    delta_w := post_move_base.Width() - geom.Width()
+    delta_h := post_move_base.Height() - geom.Height()
 
     if delta_h != 0 || delta_w != 0 {
         // fluxbox has done it again. We issued a move, and we got a taller window, too!
-        log.Printf("Move: resetting dimensions due to w/h delta: %v/%v\n", delta_w, delta_h)
+        log.Printf("Move: resetting dimensions to %v due to w/h delta: %v/%v\n", geom, delta_w, delta_h)
         err = win.WMResize(geom.Width(), geom.Height())
         if err != nil {return err}
-        _, err = WaitForGeometryUpdate(win, post_move, MoveResizeTimeout)
+
+        // wait for that to succeed
+        err = PollFor(win, GeometryDiffers(post_move_base))
         if err != nil {return err}
+    }
+    // make sure window did actually move
+    err = PollFor(win, DecorDiffers(decor_geom))
+    if err != nil {
+        // if we had a timeout, that means that the window didn't move
+        // we want to send an error mentioning that fact specifically
+        // instead of a generic "lol timeout happan in polling :DDD"
+        if te, wasTimeout := err.(*TimeoutError); wasTimeout {
+            return &TimeoutError{"Move: window didn't move", te.Timeout}
+        }
+        // return whatever other error stymied the polling
+        return err
     }
     return nil
 }
@@ -104,22 +167,25 @@ func Move(win *xwindow.Window, x, y int) error {
 // same as above, but moveresize instead of just move at the first step,
 // then resize to the provided w/h instead of a snapshotted one
 // this implementation differs from Move in that it makes no effort to be end-synchronous
+// This function waits only on the window's inner geometry resizing, not on actual movement occuring
 func MoveResize(win *xwindow.Window, x, y, width, height int) error {
-    // snapshot only DecorGeometry so we can tell when the move has completed
-    pre_move, err := win.DecorGeometry()
-    if err != nil {return err}
+    // snapshot window dimensions
+    base, err := win.Geometry()
+    if err != nil { return err }
+
     // move window then wait...
     err = win.WMMoveResize(x, y, width, height)
     if err != nil {return err}
-    _, err = WaitForGeometryUpdate(win, pre_move, MoveResizeTimeout)
-
-    // check inner geometry for correct sizing
-    geom, err := win.Geometry()
+    err = PollFor(win, GeometryDiffers(base))
     if err != nil {return err}
 
+    // check that the new geometry is what we requested
     // this may be inadvisable: what about window hints?
+    geom, err := win.Geometry()
+    if err != nil {return err}
     if geom.Width() != width || geom.Height() != height {
         // something derped! resize to make it right!
+        // if window hints constrained us, this won't upset them
         log.Println("MoveResize: resizing again after incorrect new dimensions")
         err = win.WMResize(width, height)
         if err != nil {return err}
@@ -128,3 +194,10 @@ func MoveResize(win *xwindow.Window, x, y, width, height int) error {
     return nil
 }
 
+func Geometries(win *xwindow.Window) (xrect.Rect, xrect.Rect, error) {
+    decor, err := win.DecorGeometry()
+    if err != nil { return nil, nil, err }
+    base, err := win.Geometry()
+    if err != nil { return nil, nil, err }
+    return decor, base, nil
+}

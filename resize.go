@@ -40,6 +40,7 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
         return fmt.Errorf("Resize: coudn't get normal geometry: %v", err)
     }
     w, h := geom.Width(), geom.Height()
+    log.Printf("ResizeDirection: pre_geom == %v\n", geom)
 
 
     if dir == wm.Left || dir == wm.Right {
@@ -64,8 +65,15 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     // wait for the geometry to change
     // we use a goroutine to query X a bunch while waiting for the window
     // to finish resizing
-    post_decor, err := wm.WaitForGeometryUpdate(win, pre_decor, ResizeWindowTimeout)
+    err = wm.PollFor(win, wm.DecorDiffers(pre_decor), wm.GeometryDiffers(geom))
+    if err != nil {
+        return fmt.Errorf("ResizeDirection: error waiting for window geometries to change: %v", err)
+    }
+
+    post_decor, post_geom, err := wm.Geometries(win)
     if err != nil { return err }
+    log.Printf("ResizeDirection: post_decor == %v\n", post_decor)
+    log.Printf("ResizeDirection: post_geom == %v\n", post_geom)
 
     // the opposite edge should stay in the same place
     op := dir.Opposite()
@@ -86,9 +94,7 @@ func ResizeDirection(X *xgbutil.XUtil, win *xwindow.Window, dir wm.Direction, px
     }
 
     // move to lock opposite edge
-    err = wm.Move(win, x, y)
-    if err != nil { return err }
-    return nil
+    return wm.Move(win, x, y)
 }
 
 func SideOfRectangle(geom xrect.Rect, x, y int) wm.Direction {
@@ -399,14 +405,21 @@ func ManageResizingWindows(X *xgbutil.XUtil) {
             log.Println(err)
         }
         // wait to finish
-        post_decor_pre_move, err := wm.WaitForGeometryUpdate(win, pre_decor, ResizeWindowTimeout)
+        err = wm.PollFor(win, wm.GeometryDiffers(geo), wm.DecorDiffers(pre_decor))
+        if err != nil {
+            log.Printf("Oops wjile waiting for resizing and things: %v\n", err)
+        }
+        post_decor_pre_move, _, err := wm.Geometries(win)
         if err != nil {
             log.Println(err)
             post_decor_pre_move = pre_decor
         }
         geometries["PostDecorPreMove"] = post_decor_pre_move
         // move zero pixels, then wait
-        wm.Move(win, post_decor_pre_move.X(), post_decor_pre_move.Y())
+        err = wm.Move(win, post_decor_pre_move.X(), post_decor_pre_move.Y())
+        if err != nil {
+            log.Printf("error in wm.Move zero px: %v\n", err)
+        }
 
         geo, err = win.DecorGeometry()
         if err != nil {
